@@ -10,6 +10,9 @@ using Microsoft.ServiceFabric.Services.Runtime;
 using Microsoft.ServiceFabric.Services.Remoting.Runtime;
 using Microsoft.ServiceFabric.Data;
 using System.Diagnostics;
+using Service1.Data;
+using Serilog;
+using Serilog.Sinks.File;
 
 namespace Service1
 {
@@ -20,8 +23,23 @@ namespace Service1
     {
         public Service1(StatefulServiceContext context)
             : base(context)
-        { }
+        {
+            var log = new LoggerConfiguration();
+            log.WriteTo.Async(a => a.File(context.CodePackageActivationContext.LogDirectory + "\\Service1.log",
+            fileSizeLimitBytes: 100 * 1024,
+            shared: true)
+            );
+            Log.Logger = log.CreateLogger();
+        }
 
+        public async Task Add(Item item)
+        {
+            using (var tx = StateManager.CreateTransaction())
+            {
+                await (await GetDictionary()).AddAsync(tx, Guid.NewGuid().ToString(), item);
+                await tx.CommitAsync();
+            }
+        }
 
         public Task<bool> TestMethod()
         {
@@ -49,14 +67,77 @@ namespace Service1
         /// This method executes when this replica of your service becomes primary and has write status.
         /// </summary>
         /// <param name="cancellationToken">Canceled when Service Fabric needs to shut down this service replica.</param>
-        protected override async Task RunAsync(CancellationToken cancellationToken)
+        protected override Task RunAsync(CancellationToken cancellationToken)
         {
             // TODO: Replace the following sample code with your own logic 
             //       or remove this RunAsync override if it's not needed in your service.
 
-            //var dict = await GetDictionary();
+            return Task.FromResult(true);
+        }
 
-            ////Do Nothing
+        private async Task<IReliableDictionary<string, Item>> GetDictionary()
+        {
+            return await StateManager.GetOrAddAsync<IReliableDictionary<string, Item>>("Dictionary");
+        }
+
+        public async Task<long> GetCount()
+        {
+            var dict = await GetDictionary();
+            var ct = new CancellationToken();
+            using (var tx = StateManager.CreateTransaction())
+            {
+                return await dict.GetCountAsync(tx);
+            }
+        }
+
+        public async Task<long> GetCountTraverse()
+        {
+            var dict = await GetDictionary();
+            long currentCount = 0;
+            var ct = new CancellationToken();
+            using (var tx = StateManager.CreateTransaction())
+            {
+                var enumerable = await dict.CreateEnumerableAsync(tx);
+                using (var enumerator = enumerable.GetAsyncEnumerator())
+                {
+                    while (await enumerator.MoveNextAsync(ct))
+                    {
+                        var current = enumerator.Current;
+                        await dict.TryRemoveAsync(tx, current.Key);
+                        //Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Processed {current.Key}");
+                        currentCount++;
+                    }
+                    //await tx.CommitAsync();
+                }
+            }
+            return currentCount;
+        }
+
+        public async Task Delete(int count)
+        {
+            var dict = await GetDictionary();
+            var currentCount = 0;
+            var ct = new CancellationToken();
+            using (var tx = StateManager.CreateTransaction())
+            {
+                var enumerable = await dict.CreateEnumerableAsync(tx);
+                using (var enumerator = enumerable.GetAsyncEnumerator())
+                {
+                    while (await enumerator.MoveNextAsync(ct))
+                    {
+                        if(currentCount >= count)
+                        {
+                            Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Exited");
+                            break;
+                        }
+                        var current = enumerator.Current;
+                        await dict.TryRemoveAsync(tx, current.Key);
+                        Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Processed {current.Key}");
+                        currentCount++;
+                    }
+                    await tx.CommitAsync();
+                }
+            }
         }
     }
 }
