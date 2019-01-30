@@ -5,7 +5,7 @@ Reproduces memory issues found in ReliableCollections
 - Build and Deploy the project
 
 # Test - ConcurrentDictionary
-- Run Test "SetDictionryModeMemory()"
+- Run Test "SetDictionaryModeMemory()"
 - Run Test "AddItems()" - this adds 10k items to a ConcurrentDictionary within the service
 - View Memory Usage - should be approx 200-300mb
 - Run Test "DeleteItems()" - this will remove 10k items
@@ -16,7 +16,7 @@ Reproduces memory issues found in ReliableCollections
 - View Memory Usage - should drop to approx 50mb again
 
 # Test - ServiceFabric ReliableDictionary
-- Run Test "SetDictionryModeServiceFabric()"
+- Run Test "SetDictionaryModeServiceFabric()"
 - Run Test "AddItems()" - this adds 10k items to a ReliableDictionary within the service
 - View Memory Usage - should be approx 200-300mb
 - Run Test "DeleteItems()" - this will remove 10k items
