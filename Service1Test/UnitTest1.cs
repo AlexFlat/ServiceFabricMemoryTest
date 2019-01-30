@@ -11,6 +11,7 @@ namespace Service1Test
     public class UnitTest1
     {
         private const string SERVICEURL = "fabric:/ServiceFabricTest/Service1";
+        private const int ITEM_COUNT = 10000;
 
         [TestMethod]
         public void TestMethod1()
@@ -36,7 +37,7 @@ namespace Service1Test
             {
                 item.MetaDatas.AddOrUpdate(i.ToString(), $"Value {i}");
             }
-            Parallel.For(0, 10000, (current) =>
+            Parallel.For(0, ITEM_COUNT, (current) =>
             {
                 proxy.Add(item).Wait();
             }
@@ -45,11 +46,11 @@ namespace Service1Test
         }
 
         [TestMethod]
-        public void Delete()
+        public void DeleteItems()
         {
             var url = new Uri(SERVICEURL);
             var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
-            proxy.Delete(10000).Wait();
+            proxy.Delete(ITEM_COUNT).Wait();
         }
 
         [TestMethod]
@@ -68,6 +69,30 @@ namespace Service1Test
             var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
             var result = proxy.GetCountTraverse().Result;
             Assert.IsTrue(false, $"Count Equals {result}");
+        }
+
+        [TestMethod]
+        public void SetDictionryModeServiceFabric()
+        {
+            var url = new Uri(SERVICEURL);
+            var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
+            proxy.UseServiceFabricState(true).Wait();
+        }
+
+        [TestMethod]
+        public void SetDictionryModeMemory()
+        {
+            var url = new Uri(SERVICEURL);
+            var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
+            proxy.UseServiceFabricState(false).Wait();
+        }
+
+        [TestMethod]
+        public void GCCollect()
+        {
+            var url = new Uri(SERVICEURL);
+            var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
+            proxy.GCCollect().Wait();
         }
 
     }

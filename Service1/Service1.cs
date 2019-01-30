@@ -13,6 +13,7 @@ using System.Diagnostics;
 using Service1.Data;
 using Serilog;
 using Serilog.Sinks.File;
+using System.Collections.Concurrent;
 
 namespace Service1
 {
@@ -21,6 +22,9 @@ namespace Service1
     /// </summary>
     public sealed class Service1 : StatefulService, IService1
     {
+        private bool _useServiceFabricState = true;
+        private ConcurrentDictionary<string, Item> _concurrentDictionary = new ConcurrentDictionary<string, Item>();
+
         public Service1(StatefulServiceContext context)
             : base(context)
         {
@@ -34,10 +38,18 @@ namespace Service1
 
         public async Task Add(Item item)
         {
-            using (var tx = StateManager.CreateTransaction())
+            if (_useServiceFabricState)
             {
-                await (await GetDictionary()).AddAsync(tx, Guid.NewGuid().ToString(), item);
-                await tx.CommitAsync();
+                using (var tx = StateManager.CreateTransaction())
+                {
+
+                    await (await GetDictionary()).AddAsync(tx, Guid.NewGuid().ToString(), item);
+                    await tx.CommitAsync();
+                }
+            }
+            else
+            {
+                _concurrentDictionary.TryAdd(Guid.NewGuid().ToString(), item);
             }
         }
 
@@ -82,32 +94,47 @@ namespace Service1
 
         public async Task<long> GetCount()
         {
-            var dict = await GetDictionary();
-            var ct = new CancellationToken();
-            using (var tx = StateManager.CreateTransaction())
+            if(_useServiceFabricState)
             {
-                return await dict.GetCountAsync(tx);
+                var dict = await GetDictionary();
+                var ct = new CancellationToken();
+                using (var tx = StateManager.CreateTransaction())
+                {
+                    return await dict.GetCountAsync(tx);
+                }
+            }
+            else
+            {
+                return _concurrentDictionary.Count;
             }
         }
 
         public async Task<long> GetCountTraverse()
         {
-            var dict = await GetDictionary();
             long currentCount = 0;
-            var ct = new CancellationToken();
-            using (var tx = StateManager.CreateTransaction())
+            if (_useServiceFabricState)
             {
-                var enumerable = await dict.CreateEnumerableAsync(tx);
-                using (var enumerator = enumerable.GetAsyncEnumerator())
+                var dict = await GetDictionary();
+                var ct = new CancellationToken();
+                using (var tx = StateManager.CreateTransaction())
                 {
-                    while (await enumerator.MoveNextAsync(ct))
+                    var enumerable = await dict.CreateEnumerableAsync(tx);
+                    using (var enumerator = enumerable.GetAsyncEnumerator())
                     {
-                        var current = enumerator.Current;
-                        await dict.TryRemoveAsync(tx, current.Key);
-                        //Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Processed {current.Key}");
-                        currentCount++;
+                        while (await enumerator.MoveNextAsync(ct))
+                        {
+                            var current = enumerator.Current;
+                            currentCount++;
+                        }
                     }
-                    //await tx.CommitAsync();
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _concurrentDictionary.Keys.Count; i++)
+                {
+                    var current = _concurrentDictionary.ElementAt(i);
+                    currentCount++;
                 }
             }
             return currentCount;
@@ -115,29 +142,58 @@ namespace Service1
 
         public async Task Delete(int count)
         {
-            var dict = await GetDictionary();
-            var currentCount = 0;
-            var ct = new CancellationToken();
-            using (var tx = StateManager.CreateTransaction())
+            if(_useServiceFabricState)
             {
-                var enumerable = await dict.CreateEnumerableAsync(tx);
-                using (var enumerator = enumerable.GetAsyncEnumerator())
+                var dict = await GetDictionary();
+                var currentCount = 0;
+                var ct = new CancellationToken();
+                using (var tx = StateManager.CreateTransaction())
                 {
-                    while (await enumerator.MoveNextAsync(ct))
+                    var enumerable = await dict.CreateEnumerableAsync(tx);
+                    using (var enumerator = enumerable.GetAsyncEnumerator())
                     {
-                        if(currentCount >= count)
+                        while (await enumerator.MoveNextAsync(ct))
                         {
-                            Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Exited");
-                            break;
+                            if (currentCount >= count)
+                            {
+                                Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Exited");
+                                break;
+                            }
+                            var current = enumerator.Current;
+                            await dict.TryRemoveAsync(tx, current.Key);
+                            Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Processed {current.Key}");
+                            currentCount++;
                         }
-                        var current = enumerator.Current;
-                        await dict.TryRemoveAsync(tx, current.Key);
-                        Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Processed {current.Key}");
-                        currentCount++;
+                        await tx.CommitAsync();
                     }
-                    await tx.CommitAsync();
                 }
             }
+            else
+            {
+                var deleted = 0;
+                while (_concurrentDictionary.Count > 0)
+                {
+                    _concurrentDictionary.TryRemove(_concurrentDictionary.Keys.ElementAt(0), out var item);
+                    deleted++;
+                    if (deleted >= count)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        public Task UseServiceFabricState(bool enable)
+        {
+            _useServiceFabricState = enable;
+            return Task.FromResult(true);
+        }
+
+        public Task GCCollect()
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            return Task.FromResult(true);
         }
     }
 }

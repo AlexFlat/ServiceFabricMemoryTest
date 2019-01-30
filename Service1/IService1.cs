@@ -10,6 +10,8 @@ namespace Service1
 {
     public interface IService1 : IService
     {
+        Task GCCollect();
+        Task UseServiceFabricState(bool enable);
         Task<bool> TestMethod();
 
         Task Add(Item item);
