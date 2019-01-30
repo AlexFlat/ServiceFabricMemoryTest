@@ -72,7 +72,7 @@ namespace Service1Test
         }
 
         [TestMethod]
-        public void SetDictionryModeServiceFabric()
+        public void SetDictionaryModeServiceFabric()
         {
             var url = new Uri(SERVICEURL);
             var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
@@ -80,7 +80,7 @@ namespace Service1Test
         }
 
         [TestMethod]
-        public void SetDictionryModeMemory()
+        public void SetDictionaryModeMemory()
         {
             var url = new Uri(SERVICEURL);
             var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
