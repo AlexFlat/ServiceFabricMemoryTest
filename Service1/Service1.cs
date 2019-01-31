@@ -140,6 +140,79 @@ namespace Service1
             return currentCount;
         }
 
+        public async Task<long> GetCountTraverseGetKey()
+        {
+            long currentCount = 0;
+            if (_useServiceFabricState)
+            {
+                var dict = await GetDictionary();
+                var ct = new CancellationToken();
+                using (var tx = StateManager.CreateTransaction())
+                {
+                    var enumerable = await dict.CreateEnumerableAsync(tx);
+                    using (var enumerator = enumerable.GetAsyncEnumerator())
+                    {
+                        while (await enumerator.MoveNextAsync(ct))
+                        {
+                            var current = enumerator.Current;
+                            var exists = await dict.ContainsKeyAsync(tx, current.Key);
+                            currentCount++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _concurrentDictionary.Keys.Count; i++)
+                {
+                    var current = _concurrentDictionary.ElementAt(i);
+                    currentCount++;
+                }
+            }
+            return currentCount;
+        }
+        public async Task<long> GetCountTraverseGetValue()
+        {
+            long currentCount = 0;
+            if (_useServiceFabricState)
+            {
+                var dict = await GetDictionary();
+                var ct = new CancellationToken();
+                using (var tx = StateManager.CreateTransaction())
+                {
+                    var enumerable = await dict.CreateEnumerableAsync(tx);
+                    using (var enumerator = enumerable.GetAsyncEnumerator())
+                    {
+                        while (await enumerator.MoveNextAsync(ct))
+                        {
+                            var current = enumerator.Current;
+                            var copy = await dict.TryGetValueAsync(tx, current.Key);
+                            currentCount++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _concurrentDictionary.Keys.Count; i++)
+                {
+                    var current = _concurrentDictionary.ElementAt(i);
+                    currentCount++;
+                }
+            }
+            return currentCount;
+        }
+
+        private async Task DeleteItem( string key)
+        {
+            using (var tx = StateManager.CreateTransaction())
+            {
+                var dict = await GetDictionary();
+                await dict.TryRemoveAsync(tx, key);
+                await tx.CommitAsync();
+            }
+        }
+
         public async Task Delete(int count)
         {
             if(_useServiceFabricState)
@@ -160,11 +233,9 @@ namespace Service1
                                 break;
                             }
                             var current = enumerator.Current;
-                            await dict.TryRemoveAsync(tx, current.Key);
-                            Log.Information($"{nameof(RunAsync)} - Count {currentCount} - Processed {current.Key}");
+                            await DeleteItem(current.Key);
                             currentCount++;
                         }
-                        await tx.CommitAsync();
                     }
                 }
             }

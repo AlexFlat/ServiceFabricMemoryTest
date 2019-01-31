@@ -19,7 +19,8 @@ namespace Service1
 
         Task<long> GetCount();
         Task<long> GetCountTraverse();
-
+        Task<long> GetCountTraverseGetKey();
+        Task<long> GetCountTraverseGetValue();
 
     }
 }

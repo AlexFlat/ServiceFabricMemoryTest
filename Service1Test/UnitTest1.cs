@@ -11,7 +11,7 @@ namespace Service1Test
     public class UnitTest1
     {
         private const string SERVICEURL = "fabric:/ServiceFabricTest/Service1";
-        private const int ITEM_COUNT = 10000;
+        private const int ITEM_COUNT = 100000;
 
         [TestMethod]
         public void TestMethod1()
@@ -37,7 +37,10 @@ namespace Service1Test
             {
                 item.MetaDatas.AddOrUpdate(i.ToString(), $"Value {i}");
             }
-            Parallel.For(0, ITEM_COUNT, (current) =>
+
+            var parallelOptions = new ParallelOptions() { MaxDegreeOfParallelism = 8 };
+
+            Parallel.For(0, ITEM_COUNT, parallelOptions, (current) =>
             {
                 proxy.Add(item).Wait();
             }
@@ -68,6 +71,24 @@ namespace Service1Test
             var url = new Uri(SERVICEURL);
             var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
             var result = proxy.GetCountTraverse().Result;
+            Assert.IsTrue(false, $"Count Equals {result}");
+        }
+
+        [TestMethod]
+        public void DictionaryCountTraverseGetKey()
+        {
+            var url = new Uri(SERVICEURL);
+            var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
+            var result = proxy.GetCountTraverseGetKey().Result;
+            Assert.IsTrue(false, $"Count Equals {result}");
+        }
+
+        [TestMethod]
+        public void DictionaryCountTraverseGetValue()
+        {
+            var url = new Uri(SERVICEURL);
+            var proxy = ServiceProxy.Create<IService1>(url, new Microsoft.ServiceFabric.Services.Client.ServicePartitionKey(0));
+            var result = proxy.GetCountTraverseGetValue().Result;
             Assert.IsTrue(false, $"Count Equals {result}");
         }
 
